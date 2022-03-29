@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"mime"
 	"net"
 	"net/http"
@@ -539,6 +540,19 @@ func main() {
 	if isUnixSocket != nil && isUnixSocket() {
 		network = "unix"
 	}
+
+	opts = append(opts, grpc.WithStreamInterceptor(func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		username := os.Getenv("WMUSER")
+		password := os.Getenv("WMPWD")
+		if username == "" || password == "" {
+			log.Printf("WMUSER and WMPWD env variables not set; authenticated reflection connections will not work")
+		} else {
+			ctx = metadata.AppendToOutgoingContext(ctx, "username", username)
+			ctx = metadata.AppendToOutgoingContext(ctx, "password", password)
+		}
+		return streamer(ctx, desc, cc, method, opts...)
+	}))
+
 	cc, err := dial(dialCtx, network, target, creds, *connectFailFast, opts...)
 	if err != nil {
 		fail(err, "Failed to dial target host %q", target)
